@@ -1,0 +1,61 @@
+pipeline {
+	agent any
+
+	options {
+		timestamps()
+		disableConcurrentBuilds()
+		buildDiscarder(logRotator(numToKeepStr: '10'))
+		skipDefaultCheckout(true)
+	}
+
+	stages {
+		stage('Checkout') {
+			steps {
+				checkout scm
+			}
+		}
+
+		stage('Verificar entorno') {
+			steps {
+				bat 'java -version'
+				bat 'call mvnw.cmd -version'
+			}
+		}
+
+		stage('Compilar y probar') {
+			steps {
+				bat 'call mvnw.cmd clean verify'
+			}
+		}
+
+		stage('Verificar artefacto') {
+			steps {
+				bat '''
+					echo Contenido de target:
+					dir target
+					echo.
+					dir /b target\\*.jar > nul 2>&1
+					if errorlevel 1 (
+						echo ERROR: No se encontro ningun archivo JAR en target.
+						exit /b 1
+					)
+					echo OK: Se encontro al menos un archivo JAR en target.
+					dir /b target\\*.jar
+				'''
+			}
+		}
+	}
+
+	post {
+		always {
+			junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+		}
+		success {
+			archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+			echo 'Pipeline CI terminado correctamente.'
+		}
+		failure {
+			echo 'La compilacion o las pruebas fallaron.'
+		}
+	}
+}
